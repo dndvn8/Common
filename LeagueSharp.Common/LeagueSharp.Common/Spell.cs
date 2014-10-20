@@ -1,4 +1,5 @@
 ﻿#region LICENSE
+
 /*
  Copyright 2014 - 2014 LeagueSharp
  Orbwalking.cs is part of LeagueSharp.Common.
@@ -16,6 +17,7 @@
  You should have received a copy of the GNU General Public License
  along with LeagueSharp.Common. If not, see <http://www.gnu.org/licenses/>.
 */
+
 #endregion
 
 #region
@@ -30,7 +32,7 @@ using SharpDX;
 namespace LeagueSharp.Common
 {
     /// <summary>
-    /// This class allows you to handle the spells easily.
+    ///     This class allows you to handle the spells easily.
     /// </summary>
     public class Spell
     {
@@ -56,7 +58,8 @@ namespace LeagueSharp.Common
         public bool IsChargedSpell;
         public bool IsSkillshot;
         public int LastCastAttemptT = 0;
-        public HitChance MinHitChange = HitChance.High;
+        public HitChance MinHitChance = HitChance.High;
+        [Obsolete("Use MinHitChance")] public HitChance MinHitChange = HitChance.High;
         public SpellSlot Slot;
         public float Speed;
         public SkillshotType Type;
@@ -68,15 +71,15 @@ namespace LeagueSharp.Common
         private float _range;
         private Vector3 _rangeCheckFrom;
 
-        public SpellDataInst Instance
-        {
-            get { return ObjectManager.Player.Spellbook.GetSpell(Slot); }
-        }
-
         public Spell(SpellSlot slot, float range = float.MaxValue)
         {
             Slot = slot;
             Range = range;
+        }
+
+        public SpellDataInst Instance
+        {
+            get { return ObjectManager.Player.Spellbook.GetSpell(Slot); }
         }
 
         public float Range
@@ -131,10 +134,7 @@ namespace LeagueSharp.Common
 
         public Vector3 RangeCheckFrom
         {
-            get
-            {
-                return !_rangeCheckFrom.To2D().IsValid() ? ObjectManager.Player.ServerPosition : _rangeCheckFrom;
-            }
+            get { return !_rangeCheckFrom.To2D().IsValid() ? ObjectManager.Player.ServerPosition : _rangeCheckFrom; }
             set { _rangeCheckFrom = value; }
         }
 
@@ -183,7 +183,7 @@ namespace LeagueSharp.Common
         }
 
         /// <summary>
-        /// Start charging the spell if its not charging.
+        ///     Start charging the spell if its not charging.
         /// </summary>
         public void StartCharging()
         {
@@ -195,7 +195,7 @@ namespace LeagueSharp.Common
         }
 
         /// <summary>
-        /// Start charging the spell if its not charging.
+        ///     Start charging the spell if its not charging.
         /// </summary>
         public void StartCharging(Vector3 position)
         {
@@ -215,7 +215,7 @@ namespace LeagueSharp.Common
                 {
                     return;
                 }
-                Console.WriteLine((byte)decoded.Slot);
+                Console.WriteLine((byte) decoded.Slot);
                 args.Process = false;
             }
 
@@ -252,33 +252,42 @@ namespace LeagueSharp.Common
 
         public PredictionOutput GetPrediction(Obj_AI_Base unit, bool aoe = false, float overrideRange = -1)
         {
-
-            return Prediction.GetPrediction(new PredictionInput
-            {
-                Unit = unit,
-                Delay = Delay,
-                Radius = Width,
-                Speed = Speed,
-                From = From,
-                Range = (overrideRange > 0) ? overrideRange : Range,
-                Collision = Collision,
-                Type = Type,
-                RangeCheckFrom = RangeCheckFrom,
-                Aoe = aoe,
-            });
+            return
+                Prediction.GetPrediction(
+                    new PredictionInput
+                    {
+                        Unit = unit,
+                        Delay = Delay,
+                        Radius = Width,
+                        Speed = Speed,
+                        From = From,
+                        Range = (overrideRange > 0) ? overrideRange : Range,
+                        Collision = Collision,
+                        Type = Type,
+                        RangeCheckFrom = RangeCheckFrom,
+                        Aoe = aoe,
+                    });
         }
 
         public List<Obj_AI_Base> GetCollision(Vector2 from, List<Vector2> to, float delayOverride = -1)
         {
-            return Common.Collision.GetCollision(to.Select(h => h.To3D()).ToList(), new PredictionInput
-            {
-                From = from.To3D(),
-                Type = Type,
-                Radius = Width,
-                Delay = delayOverride > 0 ? delayOverride : Delay,
-                Speed = Speed,
-            });
-            
+            return Common.Collision.GetCollision(
+                to.Select(h => h.To3D()).ToList(),
+                new PredictionInput
+                {
+                    From = from.To3D(),
+                    Type = Type,
+                    Radius = Width,
+                    Delay = delayOverride > 0 ? delayOverride : Delay,
+                    Speed = Speed,
+                });
+        }
+
+        public float GetHitCount(HitChance hitChance = HitChance.High)
+        {
+            return
+                (from hero in ObjectManager.Get<Obj_AI_Hero>() where hero.IsValidTarget() select GetPrediction(hero))
+                    .Count(prediction => prediction.Hitchance >= hitChance);
         }
 
         private CastStates _cast(Obj_AI_Base unit,
@@ -288,7 +297,7 @@ namespace LeagueSharp.Common
             int minTargets = -1)
         {
             //Spell not ready.
-            if (ObjectManager.Player.Spellbook.CanUseSpell(Slot) != SpellState.Ready && !packetCast)
+            if (!IsReady())
             {
                 return CastStates.NotReady;
             }
@@ -347,7 +356,7 @@ namespace LeagueSharp.Common
             }
 
             //The hitchance is too low.
-            if (prediction.Hitchance < MinHitChange || (exactHitChance && prediction.Hitchance != MinHitChange))
+            if (prediction.Hitchance < MinHitChance || (exactHitChance && prediction.Hitchance != MinHitChance))
             {
                 return CastStates.LowHitChance;
             }
@@ -388,7 +397,7 @@ namespace LeagueSharp.Common
         }
 
         /// <summary>
-        /// Self-casts the spell.
+        ///     Self-casts the spell.
         /// </summary>
         public bool Cast()
         {
@@ -396,7 +405,7 @@ namespace LeagueSharp.Common
         }
 
         /// <summary>
-        /// Casts the targetted spell on the unit.
+        ///     Casts the targetted spell on the unit.
         /// </summary>
         public void CastOnUnit(Obj_AI_Base unit, bool packetCast = false)
         {
@@ -418,7 +427,7 @@ namespace LeagueSharp.Common
         }
 
         /// <summary>
-        /// Casts the spell to the unit using the prediction if its an skillshot.
+        ///     Casts the spell to the unit using the prediction if its an skillshot.
         /// </summary>
         public CastStates Cast(Obj_AI_Base unit, bool packetCast = false, bool aoe = false)
         {
@@ -426,7 +435,7 @@ namespace LeagueSharp.Common
         }
 
         /// <summary>
-        /// Casts the spell to the position.
+        ///     Casts the spell to the position.
         /// </summary>
         public void Cast(Vector2 position, bool packetCast = false)
         {
@@ -434,10 +443,15 @@ namespace LeagueSharp.Common
         }
 
         /// <summary>
-        /// Casts the spell to the position.
+        ///     Casts the spell to the position.
         /// </summary>
         public void Cast(Vector3 position, bool packetCast = false)
         {
+            if (!IsReady())
+            {
+                return;
+            }
+
             LastCastAttemptT = Environment.TickCount;
 
             if (IsChargedSpell)
@@ -445,8 +459,8 @@ namespace LeagueSharp.Common
                 if (IsCharging)
                 {
                     Packet.C2S.ChargedCast.Encoded(
-                        new Packet.C2S.ChargedCast.Struct(
-                            (SpellSlot) ((byte) Slot), position.X, position.Z, position.Y)).Send();
+                        new Packet.C2S.ChargedCast.Struct((SpellSlot) ((byte) Slot), position.X, position.Z, position.Y))
+                        .Send();
                 }
                 else
                 {
@@ -465,19 +479,21 @@ namespace LeagueSharp.Common
         }
 
         /// <summary>
-        /// Casts the spell if the hitchance equals the set hitchance.
+        ///     Casts the spell if the hitchance equals the set hitchance.
         /// </summary>
         public bool CastIfHitchanceEquals(Obj_AI_Base unit, HitChance hitChance, bool packetCast = false)
         {
-            var currentHitchance = MinHitChange;
-            MinHitChange = hitChance;
+            var currentHitchance = MinHitChance;
+            MinHitChance = hitChance;
+            MinHitChange = MinHitChance;
             var castResult = _cast(unit, packetCast, false, false);
-            MinHitChange = currentHitchance;
+            MinHitChance = currentHitchance;
+            MinHitChange = MinHitChance;
             return castResult == CastStates.SuccessfullyCasted;
         }
 
         /// <summary>
-        /// Casts the spell if it will hit the set targets.
+        ///     Casts the spell if it will hit the set targets.
         /// </summary>
         public bool CastIfWillHit(Obj_AI_Base unit, int minTargets = 5, bool packetCast = false)
         {
@@ -486,21 +502,22 @@ namespace LeagueSharp.Common
         }
 
         /// <summary>
-        /// Returns if the spell is ready to use.
+        ///     Returns if the spell is ready to use.
         /// </summary>
         public bool IsReady(int t = 0)
         {
-            if (t == 0 || ObjectManager.Player.Spellbook.CanUseSpell(Slot) == SpellState.Ready)
+            if (t == 0 && ObjectManager.Player.Spellbook.CanUseSpell(Slot) != SpellState.Ready)
             {
-                return (t != 0) || ObjectManager.Player.Spellbook.CanUseSpell(Slot) == SpellState.Ready;
+                return false;
             }
 
-            return ObjectManager.Player.Spellbook.CanUseSpell(Slot) == SpellState.Cooldown &&
-                   (ObjectManager.Player.Spellbook.GetSpell(Slot).CooldownExpires - Game.Time) <= t / 1000f;
+            return t == 0 ||
+                   (ObjectManager.Player.Spellbook.CanUseSpell(Slot) == SpellState.Cooldown &&
+                    (ObjectManager.Player.Spellbook.GetSpell(Slot).CooldownExpires - Game.Time) <= t / 1000f);
         }
 
         /// <summary>
-        /// Returns the unit health when the spell hits the unit.
+        ///     Returns the unit health when the spell hits the unit.
         /// </summary>
         public float GetHealthPrediction(Obj_AI_Base unit)
         {
@@ -551,15 +568,16 @@ namespace LeagueSharp.Common
         }
 
         /// <summary>
-        /// Gets the damage that the skillshot will deal to the target using the damage lib.
+        ///     Gets the damage that the skillshot will deal to the target using the damage lib.
         /// </summary>
         public float GetDamage(Obj_AI_Base target, int stage = 0)
         {
-            return (float)ObjectManager.Player.GetSpellDamage(target, Slot, stage);
+            return (float) ObjectManager.Player.GetSpellDamage(target, Slot, stage);
         }
 
         /// <summary>
-        /// Gets the damage that the skillshot will deal to the target using the damage lib and returns if the target is killable or not.
+        ///     Gets the damage that the skillshot will deal to the target using the damage lib and returns if the target is
+        ///     killable or not.
         /// </summary>
         public bool IsKillable(Obj_AI_Base target, int stage = 0)
         {
@@ -567,7 +585,7 @@ namespace LeagueSharp.Common
         }
 
         /// <summary>
-        /// Returns if the spell will hit the unit when casted on castPosition.
+        ///     Returns if the spell will hit the unit when casted on castPosition.
         /// </summary>
         public bool WillHit(Obj_AI_Base unit,
             Vector3 castPosition,
@@ -584,7 +602,7 @@ namespace LeagueSharp.Common
         }
 
         /// <summary>
-        /// Returns if the spell will hit the point when casted on castPosition.
+        ///     Returns if the spell will hit the point when casted on castPosition.
         /// </summary>
         public bool WillHit(Vector3 point, Vector3 castPosition, int extraWidth = 0)
         {
@@ -618,7 +636,7 @@ namespace LeagueSharp.Common
         }
 
         /// <summary>
-        /// Returns if the point is in range of the spell.
+        ///     Returns if the point is in range of the spell.
         /// </summary>
         public bool InRange(Vector3 point)
         {

@@ -208,8 +208,8 @@ namespace LeagueSharp.Common
         {
             get
             {
-                return Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location) +
-                       "\\CommonLibMenuConfig\\";
+                return Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "LeagueSharp", "MenuConfig");
             }
         }
 
