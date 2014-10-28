@@ -435,6 +435,14 @@ namespace LeagueSharp.Common
         }
 
         /// <summary>
+        ///     Casts the spell
+        /// </summary>
+        public void Cast(bool packetCast = false)
+        {
+            Cast(ObjectManager.Player.Position, packetCast);
+        }
+
+        /// <summary>
         ///     Casts the spell to the position.
         /// </summary>
         public void Cast(Vector2 position, bool packetCast = false)
@@ -556,13 +564,13 @@ namespace LeagueSharp.Common
                 minionPositions, overrideWidth >= 0 ? overrideWidth : Width, Range);
         }
 
-        internal int CountHits(List<Obj_AI_Base> units, Vector3 castPosition)
+        public int CountHits(List<Obj_AI_Base> units, Vector3 castPosition)
         {
             var points = units.Select(unit => GetPrediction(unit).UnitPosition).ToList();
             return CountHits(points, castPosition);
         }
 
-        internal int CountHits(List<Vector3> points, Vector3 castPosition)
+        public int CountHits(List<Vector3> points, Vector3 castPosition)
         {
             return points.Count(point => WillHit(point, castPosition));
         }
