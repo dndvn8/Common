@@ -71,7 +71,7 @@ namespace LeagueSharp.Common
         {
             "Ashe", "Caitlyn", "Corki", "Draven", "Ezreal", "Graves", "KogMaw",
             "MissFortune", "Quinn", "Sivir", "Talon", "Tristana", "Twitch", "Urgot", "Varus", "Vayne", "Zed", "Jinx",
-            "Yasuo", "Lucian"
+            "Yasuo", "Lucian", "Kalista"
         };
 
         private static readonly string[] bruiser =
@@ -369,12 +369,12 @@ namespace LeagueSharp.Common
 
         static SimpleTs()
         {
-            Game.OnGameSendPacket += Game_OnGameSendPacket;
+            //Game.OnGameSendPacket += Game_OnGameSendPacket;
             Game.OnWndProc += Game_OnWndProc;
             Drawing.OnDraw += Drawing_OnDraw;
         }
 
-        internal static Obj_AI_Hero SelectedTarget
+        public static Obj_AI_Hero SelectedTarget
         {
             get { return (_config != null && _config.Item("FocusSelected").GetValue<bool>() ? _selectedTarget : null); }
         }
@@ -391,7 +391,7 @@ namespace LeagueSharp.Common
 
         private static void Game_OnWndProc(WndEventArgs args)
         {
-            if (args.Msg != (uint) WindowsMessages.WM_LBUTTONDOWN)
+            if (args.Msg != (uint)WindowsMessages.WM_LBUTTONDOWN)
             {
                 return;
             }
@@ -416,10 +416,10 @@ namespace LeagueSharp.Common
 
             var packet = Packet.C2S.SetTarget.Decoded(args.PacketData);
 
-            if (packet.NetworkId != 0 && packet.Unit.IsValid && packet.Unit is Obj_AI_Hero &&
+            if (packet.NetworkId != 0 && packet.Unit.IsValid<Obj_AI_Hero>() &&
                 packet.Unit.IsValidTarget())
             {
-                _selectedTarget = (Obj_AI_Hero) packet.Unit;
+                _selectedTarget = (Obj_AI_Hero)packet.Unit;
             }
         }
 
@@ -533,6 +533,7 @@ namespace LeagueSharp.Common
                                 autoPriorityItem.GetValue<bool>() ? GetPriorityFromDb(enemy.ChampionName) : 1, 5, 1)));
             }
             Config.AddItem(autoPriorityItem);
+            Config.AddItem(new MenuItem("TargetingMode", "Target Mode").SetShared().SetValue<StringList>(new StringList(new[] { "Low HP", "Most AD", "Most AP", "Closest", "Near Mouse", "Priority", "Less Attack", "Less Cast" }, 5)));
         }
 
         private static void autoPriorityItem_ValueChanged(object sender, OnValueChangeEventArgs e)
@@ -549,7 +550,7 @@ namespace LeagueSharp.Common
             }
         }
 
-        private static bool IsInvulnerable(Obj_AI_Base target)
+        public static bool IsInvulnerable(Obj_AI_Base target)
         {
             //TODO: add yasuo wall, spellshields, etc.
             if (target.HasBuff("Undying Rage") && target.Health >= 2f)
@@ -565,55 +566,134 @@ namespace LeagueSharp.Common
             return false;
         }
 
-        public static Obj_AI_Hero GetTarget(float range, DamageType damageType)
+
+        public static void SetTarget(Obj_AI_Hero hero)
         {
-            return GetTarget(ObjectManager.Player, range, damageType);
+            if (hero.IsValidTarget())
+            {
+                _selectedTarget = hero;
+            }
         }
 
         public static Obj_AI_Hero GetSelectedTarget()
         {
             return SelectedTarget;
         }
-        
+
+        public static Obj_AI_Hero GetTarget(float range, DamageType damageType)
+        {
+            return GetTarget(ObjectManager.Player, range, damageType);
+        }
+
         public static Obj_AI_Hero GetTarget(Obj_AI_Base champion, float range, DamageType damageType)
         {
             Obj_AI_Hero bestTarget = null;
-            var bestRatio = 0f;
 
-            if (SelectedTarget.IsValidTarget() && !IsInvulnerable(SelectedTarget) &&
-                (range < 0 && Orbwalking.InAutoAttackRange(SelectedTarget) || champion.Distance(SelectedTarget) < range))
+            if (SelectedTarget.IsValidTarget() && !IsInvulnerable(SelectedTarget) && (range < 0 && Orbwalking.InAutoAttackRange(SelectedTarget) || champion.Distance(SelectedTarget) < range))
             {
                 return SelectedTarget;
             }
 
+            var bestRatio = 0f;
+            var targetingMode = _config.Item("TargetingMode").GetValue<StringList>().SelectedIndex;
+
             foreach (var hero in ObjectManager.Get<Obj_AI_Hero>())
             {
-                if (!hero.IsValidTarget() || IsInvulnerable(hero) ||
-                    ((!(range < 0) || !Orbwalking.InAutoAttackRange(hero)) && !(champion.Distance(hero) < range)))
+                if (!hero.IsValidTarget() || IsInvulnerable(hero) || ((!(range < 0) || !Orbwalking.InAutoAttackRange(hero)) && !(champion.Distance(hero) < range)))
                 {
                     continue;
                 }
-                var damage = 0f;
 
-                switch (damageType)
+                if (bestTarget == null)
                 {
-                    case DamageType.Magical:
-                        damage = (float) ObjectManager.Player.CalcDamage(hero, Damage.DamageType.Magical, 100);
-                        break;
-                    case DamageType.Physical:
-                        damage = (float) ObjectManager.Player.CalcDamage(hero, Damage.DamageType.Physical, 100);
-                        break;
-                    case DamageType.True:
-                        damage = 100;
-                        break;
+                    bestTarget = hero;
+                    continue;
                 }
 
-                var ratio = damage / (1 + hero.Health) * GetPriority(hero);
-
-                if (ratio > bestRatio)
+                switch (targetingMode)
                 {
-                    bestRatio = ratio;
-                    bestTarget = hero;
+                    case (int)TargetSelector.TargetingMode.LowHP:
+                        {
+                            if (hero.Health < bestTarget.Health)
+                            {
+                                bestTarget = hero;
+                            }
+                            break;
+                        }
+                    case (int)TargetSelector.TargetingMode.MostAD:
+                        {
+                            if (hero.BaseAttackDamage + hero.FlatPhysicalDamageMod > bestTarget.BaseAttackDamage + bestTarget.FlatPhysicalDamageMod)
+                            {
+                                bestTarget = hero;
+                            }
+                            break;
+                        }
+                    case (int)TargetSelector.TargetingMode.MostAP:
+                        {
+                            if (hero.BaseAbilityDamage + hero.FlatMagicDamageMod > bestTarget.BaseAbilityDamage + bestTarget.FlatMagicDamageMod)
+                            {
+                                bestTarget = hero;
+                            }
+                            break;
+                        }
+                    case (int)TargetSelector.TargetingMode.Closest:
+                        {
+                            if (Geometry.Distance(hero) < Geometry.Distance(bestTarget))
+                            {
+                                bestTarget = hero;
+                            }
+                            break;
+                        }
+                    case (int)TargetSelector.TargetingMode.NearMouse:
+                        {
+                            if (SharpDX.Vector2.Distance(Game.CursorPos.To2D(), hero.Position.To2D()) + 50 < SharpDX.Vector2.Distance(Game.CursorPos.To2D(), bestTarget.Position.To2D()))
+                            {
+                                bestTarget = hero;
+                            }
+                            break;
+                        }
+                    case (int)TargetSelector.TargetingMode.AutoPriority:
+                        {
+                            var damage = 0f;
+
+                            switch (damageType)
+                            {
+                                case DamageType.Magical:
+                                    damage = (float)ObjectManager.Player.CalcDamage(hero, Damage.DamageType.Magical, 100);
+                                    break;
+                                case DamageType.Physical:
+                                    damage = (float)ObjectManager.Player.CalcDamage(hero, Damage.DamageType.Physical, 100);
+                                    break;
+                                case DamageType.True:
+                                    damage = 100;
+                                    break;
+                            }
+
+                            var ratio = damage / (1 + hero.Health) * GetPriority(hero);
+
+                            if (ratio > bestRatio)
+                            {
+                                bestRatio = ratio;
+                                bestTarget = hero;
+                            }
+                            break;
+                        }
+                    case (int)TargetSelector.TargetingMode.LessAttack:
+                        {
+                            if ((hero.Health - ObjectManager.Player.CalcDamage(hero, Damage.DamageType.Physical, hero.Health) < (bestTarget.Health - ObjectManager.Player.CalcDamage(bestTarget, Damage.DamageType.Physical, bestTarget.Health))))
+                            {
+                                bestTarget = hero;
+                            }
+                            break;
+                        }
+                    case (int)TargetSelector.TargetingMode.LessCast:
+                        {
+                            if ((hero.Health - ObjectManager.Player.CalcDamage(hero, Damage.DamageType.Magical, hero.Health) < (bestTarget.Health - ObjectManager.Player.CalcDamage(bestTarget, Damage.DamageType.Magical, bestTarget.Health))))
+                            {
+                                bestTarget = hero;
+                            }
+                            break;
+                        }
                 }
             }
 

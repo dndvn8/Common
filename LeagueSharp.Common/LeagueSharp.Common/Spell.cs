@@ -59,7 +59,6 @@ namespace LeagueSharp.Common
         public bool IsSkillshot;
         public int LastCastAttemptT = 0;
         public HitChance MinHitChance = HitChance.High;
-        [Obsolete("Use MinHitChance")] public HitChance MinHitChange = HitChance.High;
         public SpellSlot Slot;
         public float Speed;
         public SkillshotType Type;
@@ -189,7 +188,7 @@ namespace LeagueSharp.Common
         {
             if (!IsCharging && Environment.TickCount - _chargedReqSentT > 400 + Game.Ping)
             {
-                ObjectManager.Player.Spellbook.CastSpell(SpellSlot.Q);
+                ObjectManager.Player.Spellbook.CastSpell(Slot);
                 _chargedReqSentT = Environment.TickCount;
             }
         }
@@ -201,7 +200,7 @@ namespace LeagueSharp.Common
         {
             if (!IsCharging && Environment.TickCount - _chargedReqSentT > 400 + Game.Ping)
             {
-                ObjectManager.Player.Spellbook.CastSpell(SpellSlot.Q, position);
+                ObjectManager.Player.Spellbook.CastSpell(Slot, position);
                 _chargedReqSentT = Environment.TickCount;
             }
         }
@@ -435,11 +434,18 @@ namespace LeagueSharp.Common
         }
 
         /// <summary>
-        ///     Casts the spell
+        ///     Casts the spell (selfcast).
         /// </summary>
         public void Cast(bool packetCast = false)
         {
-            Cast(ObjectManager.Player.Position, packetCast);
+            if(!packetCast)
+            {
+                Cast();
+            }
+            else
+            {
+                Packet.C2S.Cast.Encoded(new Packet.C2S.Cast.Struct(ObjectManager.Player.NetworkId, Slot)).Send();
+            }
         }
 
         /// <summary>
@@ -493,10 +499,8 @@ namespace LeagueSharp.Common
         {
             var currentHitchance = MinHitChance;
             MinHitChance = hitChance;
-            MinHitChange = MinHitChance;
             var castResult = _cast(unit, packetCast, false, false);
             MinHitChance = currentHitchance;
-            MinHitChange = MinHitChance;
             return castResult == CastStates.SuccessfullyCasted;
         }
 

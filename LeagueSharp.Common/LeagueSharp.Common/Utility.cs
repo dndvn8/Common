@@ -25,7 +25,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using SharpDX;
 using Color = System.Drawing.Color;
 
@@ -34,39 +33,40 @@ using Color = System.Drawing.Color;
 namespace LeagueSharp.Common
 {
     /// <summary>
-    /// Game functions related utilities.
+    ///     Game functions related utilities.
     /// </summary>
     public static class Utility
     {
         /// <summary>
-        /// Returns if the source is facing the target.
-        /// <summary>
+        ///     Returns if the source is facing the target.
+        ///     <summary>
         public static bool IsFacing(this Obj_AI_Base source, Obj_AI_Base target, float lineLength = 300)
         {
             if (source == null || target == null)
+            {
                 return false;
+            }
 
             return
-                target.Distance(Vector2.Add(new Vector2(source.Position.X, source.Position.Y),
-                    (Vector2
-                        .Subtract(
+                target.Distance(
+                    Vector2.Add(
+                        new Vector2(source.Position.X, source.Position.Y),
+                        (Vector2.Subtract(
                             new Vector2(source.ServerPosition.X, source.ServerPosition.Y),
                             new Vector2(source.Position.X, source.Position.Y)).Normalized() * (target.Distance(source))))) <=
                 lineLength;
         }
 
         /// <summary>
-        /// Returns if both source and target are Facing Themselves.
+        ///     Returns if both source and target are Facing Themselves.
         /// </summary>
         public static bool IsBothFacing(Obj_AI_Base source, Obj_AI_Base target, float lineLength)
         {
-            return source.IsFacing(target, lineLength)
-                   && target.IsFacing
-                       (source, lineLength);
+            return source.IsFacing(target, lineLength) && target.IsFacing(source, lineLength);
         }
 
         /// <summary>
-        /// Returns if the target is valid (not dead, targetable, visible...).
+        ///     Returns if the target is valid (not dead, targetable, visible...).
         /// </summary>
         public static bool IsValidTarget(this Obj_AI_Base unit,
             float range = float.MaxValue,
@@ -95,7 +95,22 @@ namespace LeagueSharp.Common
             return true;
         }
 
-        public static void HighlightUnit(Obj_AI_Base unit, bool showHighlight = true)
+        public static bool IsValid<T>(this GameObject obj)
+        {
+            return obj.IsValid && obj is T;
+        }
+
+        public static float HealthPercentage(this Obj_AI_Base unit)
+        {
+            return unit.Health / unit.MaxHealth * 100;
+        }
+
+        public static float ManaPercentage(this Obj_AI_Base unit)
+        {
+            return unit.Mana / unit.MaxMana * 100;
+        }
+
+        public static void Highlight(this Obj_AI_Base unit, bool showHighlight = true)
         {
             if (showHighlight)
             {
@@ -112,121 +127,75 @@ namespace LeagueSharp.Common
             Packet.S2C.DebugMessage.Encoded(debugMessage).Process();
         }
 
-        public static void PrintFloatText(GameObject obj, string text, Packet.FloatTextPacket type)
+        public static void DumpPacket(this GamePacket packet, bool printChat = false)
+        {
+            var p = packet.Dump();
+            Console.WriteLine(p);
+            if (printChat)
+            {
+                Game.PrintChat(p);
+            }
+        }
+
+        public static bool IsRecalling(this Obj_AI_Hero unit)
+        {
+            return unit.Buffs.Any(buff => buff.Name.ToLower().Contains("recall"));
+        }
+
+        public static Vector3 Randomize(this Vector3 position, int min, int max)
+        {
+            var ran = new Random();
+            return new Vector2(position.X + ran.Next(min, max), position.Y + ran.Next(min, max)).To3D();
+        }
+
+        public static void PrintFloatText(this GameObject obj, string text, Packet.FloatTextPacket type)
         {
             Packet.S2C.FloatText.Encoded(new Packet.S2C.FloatText.Struct(text, type, obj.NetworkId)).Process();
         }
 
-        public static string GetAssemblyLocation()
-        {
-            var fileLoc = Assembly.GetExecutingAssembly().Location;
-            return fileLoc.Remove(fileLoc.LastIndexOf("\\System\\", StringComparison.Ordinal));
-        }
 
-        public static string FormatTime(float time)
+        public static bool IsWall(this Vector3 position)
         {
-            var t = TimeSpan.FromSeconds(time);
-            return string.Format("{0:D2}:{1:D2}", t.Minutes, t.Seconds);
-        }
-
-        public static string FormatTime(double time)
-        {
-            var t = TimeSpan.FromSeconds(time);
-            return string.Format("{0:D2}:{1:D2}", t.Minutes, t.Seconds);
-        }
-
-        /// <summary>
-        /// Searches in the haystack array for the given needle using the default equality operator and returns the index at which the needle starts.
-        /// </summary>
-        /// <typeparam name="T">Type of the arrays.</typeparam>
-        /// <param name="haystack">Sequence to operate on.</param>
-        /// <param name="needle">Sequence to search for.</param>
-        /// <returns>Index of the needle within the haystack or -1 if the needle isn't contained.</returns>
-        public static IEnumerable<int> IndexOf<T>(this T[] haystack, T[] needle)
-        {
-            if ((needle == null) || (haystack.Length < needle.Length))
-            {
-                yield break;
-            }
-
-            for (var l = 0; l < haystack.Length - needle.Length + 1; l++)
-            {
-                if (!needle.Where((data, index) => !haystack[l + index].Equals(data)).Any())
-                {
-                    yield return l;
-                }
-            }
-        }
-
-        public static bool IsWall(Vector3 position)
-        {
-            var cFlags = NavMesh.GetCollisionFlags(position);
-            return (cFlags == CollisionFlags.Wall || cFlags == CollisionFlags.Building || cFlags == CollisionFlags.Prop);
-        }
-
-        public static byte[] GetBytes(string str)
-        {
-            var bytes = new byte[str.Length * sizeof(char)];
-            Buffer.BlockCopy(str.ToCharArray(), 0, bytes, 0, bytes.Length);
-            return bytes;
-        }
-
-        public static string GetString(byte[] bytes)
-        {
-            var chars = new char[bytes.Length / sizeof(char)];
-            Buffer.BlockCopy(bytes, 0, chars, 0, bytes.Length);
-            return new string(chars);
+            return NavMesh.GetCollisionFlags(position).HasFlag(CollisionFlags.Wall);
         }
 
         public static int GetRecallTime(Obj_AI_Hero obj)
         {
-            var duration = 0;
-
-            switch (obj.Spellbook.GetSpell(SpellSlot.Recall).Name)
-            {
-                case "Recall":
-                    duration = 8000;
-                    break;
-                case "RecallImproved":
-                    duration = 7000;
-                    break;
-                case "OdinRecall":
-                    duration = 4500;
-                    break;
-                case "OdinRecallImproved":
-                    duration = 4000;
-                    break;
-            }
-            return duration;
+            return GetRecallTime(obj.Spellbook.GetSpell(SpellSlot.Recall).Name);
         }
 
         public static int GetRecallTime(string recallName)
         {
             var duration = 0;
 
-            switch (recallName)
+            switch (recallName.ToLower())
             {
-                case "Recall":
+                case "recall":
                     duration = 8000;
                     break;
-                case "RecallImproved":
+                case "recallimproved":
                     duration = 7000;
                     break;
-                case "OdinRecall":
+                case "odinrecall":
                     duration = 4500;
                     break;
-                case "OdinRecallImproved":
+                case "odinrecallimproved":
+                    duration = 4000;
+                    break;
+                case "superrecall":
+                    duration = 4000;
+                    break;
+                case "superrecallimproved":
                     duration = 4000;
                     break;
             }
             return duration;
         }
 
-        public static bool LevelUpSpell(this Spellbook book, SpellSlot slot)
+        public static void LevelUpSpell(this Spellbook book, SpellSlot slot)
         {
             Packet.C2S.LevelUpSpell.Encoded(new Packet.C2S.LevelUpSpell.Struct(ObjectManager.Player.NetworkId, slot))
                 .Send();
-            return true;
         }
 
         public static List<Vector2> CutPath(this List<Vector2> path, float distance)
@@ -252,7 +221,7 @@ namespace LeagueSharp.Common
         }
 
         /// <summary>
-        /// Returns the path of the unit appending the ServerPosition at the start, works even if the unit just entered fow.
+        ///     Returns the path of the unit appending the ServerPosition at the start, works even if the unit just entered fow.
         /// </summary>
         public static List<Vector2> GetWaypoints(this Obj_AI_Base unit)
         {
@@ -269,7 +238,7 @@ namespace LeagueSharp.Common
                 var timePassed = (Environment.TickCount - WaypointTracker.StoredTick[unit.NetworkId]) / 1000f;
                 if (path.PathLength() >= unit.MoveSpeed * timePassed)
                 {
-                    result = CutPath(path, (int)(unit.MoveSpeed * timePassed));
+                    result = CutPath(path, (int) (unit.MoveSpeed * timePassed));
                 }
             }
 
@@ -277,7 +246,7 @@ namespace LeagueSharp.Common
         }
 
         /// <summary>
-        /// Returns if the unit has the buff and it is active
+        ///     Returns if the unit has the buff and it is active
         /// </summary>
         public static bool HasBuff(this Obj_AI_Base unit, string buffName, bool dontUseDisplayName = false)
         {
@@ -290,7 +259,7 @@ namespace LeagueSharp.Common
         }
 
         /// <summary>
-        /// Returns the spell slot with the name.
+        ///     Returns the spell slot with the name.
         /// </summary>
         public static SpellSlot GetSpellSlot(this Obj_AI_Hero unit, string name, bool searchInSummoners = true)
         {
@@ -312,71 +281,64 @@ namespace LeagueSharp.Common
         }
 
         /// <summary>
-        /// Returns true if Player is under tower range.
+        ///     Returns true if Player is under tower range.
         /// </summary>
         public static bool UnderTurret()
         {
-            return UnderTurret(ObjectManager.Player, true);
+            return UnderTurret(ObjectManager.Player.Position, true);
         }
 
         /// <summary>
-        /// Returns true if the unit is under tower range.
+        ///     Returns true if the unit is under tower range.
         /// </summary>
-        public static bool UnderTurret(Obj_AI_Base unit)
+        public static bool UnderTurret(this Obj_AI_Base unit)
         {
-            return UnderTurret(unit, true);
+            return UnderTurret(unit.Position, true);
         }
 
         /// <summary>
-        /// Returns true if the unit is under turret range.
+        ///     Returns true if the unit is under turret range.
         /// </summary>
-        public static bool UnderTurret(Obj_AI_Base unit, bool enemyTurretsOnly)
+        public static bool UnderTurret(this Obj_AI_Base unit, bool enemyTurretsOnly)
         {
-            foreach (var turret in ObjectManager.Get<Obj_AI_Turret>())
-            {
-                if (enemyTurretsOnly)
-                {
-                    if (turret != null && turret.IsValid && turret.IsEnemy && turret.Health > 0)
-                    {
-                        if (Vector2.Distance(unit.Position.To2D(), turret.Position.To2D()) < 950)
-                        {
-                            return true;
-                        }
-                    }
-                }
-                else
-                {
-                    if (turret != null && turret.IsValid && turret.Health > 0)
-                    {
-                        if (Vector2.Distance(unit.Position.To2D(), turret.Position.To2D()) < 950)
-                        {
-                            return true;
-                        }
-                    }
-                }
-            }
-            return false;
+            return UnderTurret(unit.Position, enemyTurretsOnly);
+        }
+
+        public static bool UnderTurret(this Vector3 position, bool enemyTurretsOnly)
+        {
+            return
+                ObjectManager.Get<Obj_AI_Turret>().Any(turret => turret.IsValidTarget(950, enemyTurretsOnly, position));
         }
 
         /// <summary>
-        /// Counts the enemies in range of Player.
+        ///     Counts the enemies in range of Player.
         /// </summary>
         public static int CountEnemysInRange(int range)
         {
-            return CountEnemysInRange(range, ObjectManager.Player);
+            return ObjectManager.Player.CountEnemysInRange(range);
         }
 
         /// <summary>
-        /// Counts the enemies in range of Unit.
+        ///     Counts the enemies in range of Unit.
         /// </summary>
+        [Obsolete("Use CountEnemysInRange(this Obj_AI_Base, int range)", false)]
         public static int CountEnemysInRange(int range, Obj_AI_Base unit)
         {
-            return CountEnemysInRange(range, ObjectManager.Player.ServerPosition);
+            return ObjectManager.Player.ServerPosition.CountEnemysInRange(range);
         }
 
         /// <summary>
-        /// Counts the enemies in range of point.
+        ///     Counts the enemies in range of Unit.
         /// </summary>
+        public static int CountEnemysInRange(this Obj_AI_Base unit, int range)
+        {
+            return unit.ServerPosition.CountEnemysInRange(range);
+        }
+
+        /// <summary>
+        ///     Counts the enemies in range of point.
+        /// </summary>
+        [Obsolete("Use CountEnemysInRange(this Vector3 point, int range)", false)]
         public static int CountEnemysInRange(int range, Vector3 point)
         {
             return
@@ -385,8 +347,20 @@ namespace LeagueSharp.Common
                     .Count(units => Vector2.Distance(point.To2D(), units.Position.To2D()) <= range);
         }
 
+
         /// <summary>
-        /// Returns true if Player is in shop range.
+        ///     Counts the enemies in range of point.
+        /// </summary>
+        public static int CountEnemysInRange(this Vector3 point, int range)
+        {
+            return
+                ObjectManager.Get<Obj_AI_Hero>()
+                    .Where(units => units.IsValidTarget())
+                    .Count(units => Vector2.Distance(point.To2D(), units.Position.To2D()) <= range);
+        }
+
+        /// <summary>
+        ///     Returns true if Player is in shop range.
         /// </summary>
         /// <returns></returns>
         public static bool InShopRange()
@@ -398,7 +372,7 @@ namespace LeagueSharp.Common
         }
 
         /// <summary>
-        /// Draws a "lag-free" circle
+        ///     Draws a "lag-free" circle
         /// </summary>
         public static void DrawCircle(Vector3 center,
             float radius,
@@ -419,7 +393,7 @@ namespace LeagueSharp.Common
                 var angle = i * Math.PI * 2 / quality;
                 pointList.Add(
                     new Vector3(
-                        center.X + radius * (float)Math.Cos(angle), center.Y + radius * (float)Math.Sin(angle),
+                        center.X + radius * (float) Math.Cos(angle), center.Y + radius * (float) Math.Sin(angle),
                         center.Z));
             }
 
@@ -531,20 +505,19 @@ namespace LeagueSharp.Common
                     return;
                 }
 
-                foreach (
-                    var unit in ObjectManager.Get<Obj_AI_Hero>().Where(h => h.IsValid && h.IsHPBarRendered && h.IsEnemy)
-                    )
+                foreach (var unit in
+                    ObjectManager.Get<Obj_AI_Hero>().Where(h => h.IsValid && h.IsHPBarRendered && h.IsEnemy))
                 {
                     var barPos = unit.HPBarPosition;
                     var damage = _damageToUnit(unit);
                     var percentHealthAfterDamage = Math.Max(0, unit.Health - damage) / unit.MaxHealth;
                     var xPos = barPos.X + XOffset + Width * percentHealthAfterDamage;
 
-                    if (damage > unit.Health)
+                    //if (damage > unit.Health)
                     {
-                        Text.X = (int)barPos.X + XOffset;
-                        Text.Y = (int)barPos.Y + YOffset - 13;
-                        Text.text = ((int)(unit.Health - damage)).ToString();
+                        Text.X = (int) barPos.X + XOffset;
+                        Text.Y = (int) barPos.Y + YOffset - 13;
+                        Text.text = ((int) (unit.Health - damage)).ToString();
                         Text.OnEndScene();
                     }
 
@@ -569,14 +542,16 @@ namespace LeagueSharp.Common
 
             public string Name;
             public string ShortName;
+            public int StartingLevel;
             public MapType _MapType;
 
-            public Map(string name, string shortName, MapType map, Vector2 grid)
+            public Map(string name, string shortName, MapType map, Vector2 grid, int startLevel = 1)
             {
                 Name = name;
                 ShortName = shortName;
                 _MapType = map;
                 Grid = grid;
+                StartingLevel = startLevel;
             }
 
             private static bool SameVector(Vector3 v1, Vector3 v2)
@@ -587,14 +562,14 @@ namespace LeagueSharp.Common
             }
 
             /// <summary>
-            /// Returns the current map.
+            ///     Returns the current map.
             /// </summary>
             public static Map GetMap()
             {
                 Vector3[] sr =
                 {
-                    new Vector3(13360.61f, 14586.56f, 218.222f),
-                    new Vector3(-174.2087f, 1056.653f, 163.7132f)
+                    new Vector3(13767.23f, 14807.54f, 218.222f),
+                    new Vector3(232.4198f, 1277.637f, 163.7132f)
                 };
                 Vector3[] dom =
                 {
@@ -626,7 +601,7 @@ namespace LeagueSharp.Common
                             ObjectManager.Get<Obj_Shop>().ToList().Find(shop => SameVector(shop.Position, pos)) != null))
                 {
                     return new Map(
-                        "The Crystal Scar", "crystalScar", MapType.CrystalScar, new Vector2(13894 / 2, 13218 / 2));
+                        "The Crystal Scar", "crystalScar", MapType.CrystalScar, new Vector2(13894 / 2, 13218 / 2), 3);
                 }
                 if (
                     ttt.Any(
@@ -643,7 +618,7 @@ namespace LeagueSharp.Common
                             ObjectManager.Get<Obj_Shop>().ToList().Find(shop => SameVector(shop.Position, pos)) != null))
                 {
                     return new Map(
-                        "Howling Abyss", "howlingAbyss", MapType.HowlingAbyss, new Vector2(13120 / 2, 12618 / 2));
+                        "Howling Abyss", "howlingAbyss", MapType.HowlingAbyss, new Vector2(13120 / 2, 12618 / 2), 3);
                 }
 
                 return new Map("Unknown", "unknown", MapType.Unknown, new Vector2(0, 0));
@@ -652,7 +627,7 @@ namespace LeagueSharp.Common
 
 
         /// <summary>
-        /// Internal class used to get the waypoints even when the enemy enters the fow of war.
+        ///     Internal class used to get the waypoints even when the enemy enters the fow of war.
         /// </summary>
         internal static class WaypointTracker
         {
@@ -686,6 +661,52 @@ namespace LeagueSharp.Common
                     }
                 }
             }
+        }
+    }
+
+    public static class Version
+    {
+        public static int MajorVersion;
+        public static int MinorVersion;
+        public static int Build;
+        public static int Revision;
+
+        private static readonly int[] VersionArray;
+
+        static Version()
+        {
+            var d = Game.Version.Split('.');
+            MajorVersion = Convert.ToInt32(d[0]);
+            MinorVersion = Convert.ToInt32(d[1]);
+            Build = Convert.ToInt32(d[2]);
+            Revision = Convert.ToInt32(d[3]);
+
+            VersionArray = new[] { MajorVersion, MinorVersion, Build, Revision };
+        }
+
+        public static bool IsOlder(string version)
+        {
+            var d = version.Split('.');
+            return MinorVersion < Convert.ToInt32(d[1]);
+        }
+
+        public static bool IsNewer(string version)
+        {
+            var d = version.Split('.');
+            return MinorVersion > Convert.ToInt32(d[1]);
+        }
+
+        public static bool IsEqual(string version)
+        {
+            var d = version.Split('.');
+            for (var i = 0; i <= d.Length; i++)
+            {
+                if (d[i] == null || Convert.ToInt32(d[i]) != VersionArray[i])
+                {
+                    return false;
+                }
+            }
+            return true;
         }
     }
 }

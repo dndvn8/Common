@@ -1,4 +1,5 @@
 ﻿#region LICENSE
+
 /*
  Copyright 2014 - 2014 LeagueSharp
  Orbwalking.cs is part of LeagueSharp.Common.
@@ -16,15 +17,18 @@
  You should have received a copy of the GNU General Public License
  along with LeagueSharp.Common. If not, see <http://www.gnu.org/licenses/>.
 */
+
 #endregion
 
 #region
 
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
-
 using SharpDX;
 
 #endregion
@@ -33,11 +37,16 @@ namespace LeagueSharp.Common
 {
     public enum WindowsMessages
     {
+        WM_LBUTTONDBLCLCK = 0x203,
+        WM_RBUTTONDBLCLCK = 0x206,
+        WM_MBUTTONDBLCLCK = 0x209,
+        WM_MBUTTONDOWN = 0x207,
+        WM_MBUTTONUP = 0x208,
         WM_MOUSEMOVE = 0x200,
         WM_LBUTTONDOWN = 0x201,
         WM_LBUTTONUP = 0x202,
-        WM_RBUTTONDOWN = 0x203,
-        WM_RBUTTONUP = 0x202,
+        WM_RBUTTONDOWN = 0x204,
+        WM_RBUTTONUP = 0x205,
         WM_KEYDOWN = 0x0100,
         WM_KEYUP = 0x101,
     }
@@ -47,6 +56,9 @@ namespace LeagueSharp.Common
     /// </summary>
     public static class Utils
     {
+        private const int STD_INPUT_HANDLE = -10;
+        private const int ENABLE_QUICK_EDIT_MODE = 0x40 | 0x80;
+
         /// <summary>
         /// Returns the cursor position on the screen.
         /// </summary>
@@ -111,6 +123,99 @@ namespace LeagueSharp.Common
         }
 
 
+        /// <summary>
+        /// Returns true if the point is under the rectangle
+        /// </summary>
+        public static bool IsUnderRectangle(Vector2 point, float x, float y, float width, float height)
+        {
+            return (point.X > x && point.X < x + width && point.Y > y && point.Y < y + height);
+        }
+
+        public static string FormatTime(float time)
+        {
+            var t = TimeSpan.FromSeconds(time);
+            return string.Format("{0:D2}:{1:D2}", t.Minutes, t.Seconds);
+        }
+
+        public static string FormatTime(double time)
+        {
+            var t = TimeSpan.FromSeconds(time);
+            return string.Format("{0:D2}:{1:D2}", t.Minutes, t.Seconds);
+        }
+
+        public static byte[] GetBytes(string str)
+        {
+            var bytes = new byte[str.Length * sizeof (char)];
+            Buffer.BlockCopy(str.ToCharArray(), 0, bytes, 0, bytes.Length);
+            return bytes;
+        }
+
+        public static string GetString(byte[] bytes)
+        {
+            var chars = new char[bytes.Length / sizeof (char)];
+            Buffer.BlockCopy(bytes, 0, chars, 0, bytes.Length);
+            return new string(chars);
+        }
+
+        /// <summary>
+        /// Searches in the haystack array for the given needle using the default equality operator and returns the index at which the needle starts.
+        /// </summary>
+        /// <typeparam name="T">Type of the arrays.</typeparam>
+        /// <param name="haystack">Sequence to operate on.</param>
+        /// <param name="needle">Sequence to search for.</param>
+        /// <returns>Index of the needle within the haystack or -1 if the needle isn't contained.</returns>
+        public static IEnumerable<int> IndexOf<T>(this T[] haystack, T[] needle)
+        {
+            if ((needle == null) || (haystack.Length < needle.Length))
+            {
+                yield break;
+            }
+
+            for (var l = 0; l < haystack.Length - needle.Length + 1; l++)
+            {
+                if (!needle.Where((data, index) => !haystack[l + index].Equals(data)).Any())
+                {
+                    yield return l;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Returns the directory where the assembly is located
+        /// </summary>
+        public static string GetLocation()
+        {
+            string FileLoc;
+            FileLoc = Assembly.GetExecutingAssembly().Location;
+            return FileLoc.Remove(FileLoc.LastIndexOf("\\", StringComparison.Ordinal));
+        }
+
+        public static string ToHexString(this byte bit)
+        {
+            return BitConverter.ToString(new[] { bit });
+        }
+
+        [DllImport("kernel32.dll")]
+        private static extern bool SetConsoleMode(IntPtr hConsoleHandle, int mode);
+
+        [DllImport("kernel32.dll")]
+        private static extern bool GetConsoleMode(IntPtr hConsoleHandle, out int mode);
+
+        [DllImport("kernel32.dll")]
+        private static extern IntPtr GetStdHandle(int handle);
+
+        /// <summary>
+        /// Allows text in the console to be selected and copied.
+        /// <summary>
+        public static void EnableConsoleEditMode()
+        {
+            int mode;
+            var handle = GetStdHandle(STD_INPUT_HANDLE);
+            GetConsoleMode(handle, out mode);
+            mode |= ENABLE_QUICK_EDIT_MODE;
+            SetConsoleMode(handle, mode);
+        }
+
         internal static class CursorPosT
         {
             private static int _posX;
@@ -134,24 +239,6 @@ namespace LeagueSharp.Common
             {
                 return new Vector2(_posX, _posY);
             }
-        }
-
-        /// <summary>
-        /// Returns true if the point is under the rectangle
-        /// </summary>
-        public static bool IsUnderRectangle(Vector2 point, float x, float y, float width, float height)
-        {
-            return (point.X > x && point.X < x + width && point.Y > y && point.Y < y + height);
-        }
-
-        /// <summary>
-        /// Returns the directory where the assembly is located
-        /// </summary>
-        public static string GetLocation()
-        {
-            string FileLoc;
-            FileLoc = Assembly.GetExecutingAssembly().Location;
-            return FileLoc.Remove(FileLoc.LastIndexOf("\\", StringComparison.Ordinal));
         }
     }
 }
